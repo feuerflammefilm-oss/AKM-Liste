@@ -6,6 +6,7 @@ enum CLI {
     static func runIfRequested() -> Bool {
         let args = CommandLine.arguments
         guard args.contains("--cli") else { return false }
+        setvbuf(stdout, nil, _IONBF, 0)     // Ausgabe sofort (sonst geht sie bei einem Absturz verloren)
         var edls: [URL] = []
         var tracks: Set<String> = []
         var rate = FrameRate.standard

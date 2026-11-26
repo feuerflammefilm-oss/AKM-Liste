@@ -90,9 +90,10 @@ enum MusicAnalysis {
                 else { merged.append((a, b)) }
             }
             var uses = 0
-            var lastEnd = Int.min
+            var lastEnd: Int? = nil
             for (a, b) in merged {
-                if a - lastEnd > gapFrames { uses += 1 }
+                if let le = lastEnd, a - le <= gapFrames { lastEnd = b; continue }
+                uses += 1
                 lastEnd = b
             }
             var w = previous[k] ?? MusicWork(key: k)
