@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: macos-latest
+    runs-on: macos-15-intel     # wie FuFF Convert; die App wird trotzdem Universal (Apple Silicon + Intel)
     steps:
       - uses: actions/checkout@v5
 
