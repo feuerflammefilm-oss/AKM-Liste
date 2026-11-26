@@ -20,7 +20,11 @@ enum CLI {
             case "--tracks": if let v = next() { tracks = Set(v.split(separator: ",").map(String.init)) }
             case "--rate": if let v = next(), let r = FrameRate.byLabel(v) { rate = r }
             case "--out": if let v = next() { out = URL(fileURLWithPath: v) }
-            case "--produktion": if let v = next(), let p = try? Produktionsdaten.load(from: URL(fileURLWithPath: v)) { prod = p }
+            case "--produktion":
+                if let v = next() {
+                    do { prod = try Produktionsdaten.load(from: URL(fileURLWithPath: v)) }
+                    catch { print("Hinweis: Produktionsdaten nicht lesbar (\(v)): \(error)") }
+                }
             default: break
             }
             i += 1
