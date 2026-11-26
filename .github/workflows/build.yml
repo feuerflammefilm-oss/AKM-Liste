@@ -1,0 +1,53 @@
+name: App bauen
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: App bauen (Universal)
+        run: VERSION="0.1.${{ github.run_number }}" scripts/build_app.sh
+
+      - name: Selbsttest der fertigen App (EDL → ORF-AKM-Liste)
+        run: |
+          APP="build/FuFF AKM-Liste.app"
+          "$APP/Contents/MacOS/AKMListe" --cli \
+            --edl Tests/fixtures/musik_synthetisch.edl \
+            --tracks A1,A2 --rate 25 \
+            --produktion Tests/fixtures/produktion_test.fuffprod \
+            --out build/test_akm.xlsx
+          "$APP/Contents/MacOS/AKMListe" --cli \
+            --edl Tests/fixtures/musik_viele.edl \
+            --tracks A1,A2 --rate 25 \
+            --produktion Tests/fixtures/produktion_test.fuffprod \
+            --out build/test_akm_viele.xlsx
+          python3 -m pip install --quiet --break-system-packages openpyxl || python3 -m pip install --quiet openpyxl
+          python3 Tests/check_xlsx.py build/test_akm.xlsx klein
+          python3 Tests/check_xlsx.py build/test_akm_viele.xlsx viele
+
+      - name: Als Download speichern
+        uses: actions/upload-artifact@v5
+        with:
+          name: FuFF-AKM-Liste
+          path: |
+            build/FuFF-AKM-Liste.zip
+            build/test_akm.xlsx
+            build/test_akm_viele.xlsx
+
+      - name: Release "Neueste Version" aktualisieren
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest build/FuFF-AKM-Liste.zip \
+            --title "FuFF AKM-Liste – neueste Version (Build ${{ github.run_number }})" \
+            --notes "Automatisch gebaut aus dem aktuellen Stand. ZIP laden, entpacken, App in den Programme-Ordner ziehen. Läuft auf Apple Silicon und Intel ab macOS 13."

@@ -1,0 +1,12 @@
+{
+ "sendetitel": "Testfilm (synthetisch)",
+ "produktionsnummer": "00/TEST/001",
+ "regie": "Regie Test",
+ "redaktion": "Redaktion Test",
+ "fuerRichtigkeit": "Bearbeiter Test",
+ "firma": "Testfirma",
+ "telefon": "0000/000000",
+ "sendebereich": "ORF 2",
+ "sendedatum1": "01.01.2027",
+ "aufzeichnung": true
+}

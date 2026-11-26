@@ -1,0 +1,15 @@
+TITLE: SYNTHETISCHE TEST-EDL (kein echtes Projekt)
+FCM: NON-DROP FRAME
+
+001  MUS01    AA    C        00:00:00:00 00:00:08:24 10:00:00:00 10:00:08:24
+* FROM CLIP NAME:  Donauwalzer_Probe.wav
+
+002  MUS01    AA    C        00:00:08:24 00:00:17:24 10:00:08:24 10:00:17:24
+* FROM CLIP NAME:  Donauwalzer_Probe.wav
+
+003  MUS02    AA    C        00:00:00:00 00:00:06:22 10:00:26:22 10:00:33:19
+* FROM CLIP NAME:  Spannung_Loop.wav
+
+004  MUS01    AA    C        00:03:20:00 00:03:25:21 10:00:31:05 10:00:37:01
+* FROM CLIP NAME:  Donauwalzer_Probe.wav
+

@@ -1,0 +1,53 @@
+import Foundation
+
+/// Kommandozeilenmodus (für den automatischen Test beim Bauen):
+/// AKMListe --cli --edl a.edl [--edl b.edl] --tracks A5,A6 [--rate 25] [--produktion p.fuffprod] --out liste.xlsx
+enum CLI {
+    static func runIfRequested() -> Bool {
+        let args = CommandLine.arguments
+        guard args.contains("--cli") else { return false }
+        var edls: [URL] = []
+        var tracks: Set<String> = []
+        var rate = FrameRate.standard
+        var out: URL?
+        var prod = Produktionsdaten()
+        var i = 1
+        func next() -> String? { i += 1; return i < args.count ? args[i] : nil }
+        while i < args.count {
+            switch args[i] {
+            case "--edl": if let v = next() { edls.append(URL(fileURLWithPath: v)) }
+            case "--tracks": if let v = next() { tracks = Set(v.split(separator: ",").map(String.init)) }
+            case "--rate": if let v = next(), let r = FrameRate.byLabel(v) { rate = r }
+            case "--out": if let v = next() { out = URL(fileURLWithPath: v) }
+            case "--produktion": if let v = next(), let p = try? Produktionsdaten.load(from: URL(fileURLWithPath: v)) { prod = p }
+            default: break
+            }
+            i += 1
+        }
+        do {
+            guard let out, !edls.isEmpty else {
+                FileHandle.standardError.write(Data("Aufruf: --cli --edl DATEI --tracks A1,A2 --out LISTE.xlsx\n".utf8))
+                exit(2)
+            }
+            var events: [EDLEvent] = []
+            for (n, u) in edls.enumerated() {
+                let f = try EDLParser.parse(u, rate: rate, trackPrefix: edls.count > 1 ? "\(n + 1)·" : "")
+                f.warnings.forEach { print("Hinweis: \($0)") }
+                events += f.events
+            }
+            if tracks.isEmpty { tracks = MusicAnalysis.suggestedMusicTracks(events) }
+            let works = MusicAnalysis.works(from: events, musicTracks: tracks, rate: rate)
+            for w in works {
+                print("\(MusicAnalysis.mmss(w.seconds(rate: rate)))\t\(w.uses)×\t\(w.titel)")
+            }
+            try AKMExport.write(works: works, rate: rate, produktion: prod, to: out) { done, total, what in
+                print("[\(done)/\(total)] \(what)")
+            }
+            print("OK \(works.count) Werke → \(out.path)")
+            exit(0)
+        } catch {
+            FileHandle.standardError.write(Data("FEHLER: \(error.localizedDescription)\n".utf8))
+            exit(1)
+        }
+    }
+}
