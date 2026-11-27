@@ -21,8 +21,18 @@ struct AKMListeApp: App {
         .defaultSize(width: 1100, height: 700)
         .commands {
             CommandGroup(replacing: .newItem) {
-                Button("EDL öffnen …") { ContentView.openPanel(model) }
+                Button("Neu") { ContentView.newList(model) }
+                    .keyboardShortcut("n", modifiers: .command)
+                Button("Öffnen …") { ContentView.openPanel(model) }
                     .keyboardShortcut("o", modifiers: .command)
+            }
+            CommandGroup(replacing: .saveItem) {
+                Button("Sichern") { ContentView.save(model, asNew: false) }
+                    .keyboardShortcut("s", modifiers: .command)
+                    .disabled(model.edls.isEmpty)
+                Button("Sichern unter …") { ContentView.save(model, asNew: true) }
+                    .keyboardShortcut("s", modifiers: [.command, .shift])
+                    .disabled(model.edls.isEmpty)
             }
         }
     }

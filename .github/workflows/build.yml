@@ -35,9 +35,13 @@ jobs:
             --edl Tests/fixtures/musik_bibliothek.edl \
             --tracks A1,A2 --rate 25 --ausschliessen "RFA FX3 0070" \
             --produktion Tests/fixtures/produktion_test.fuffprod \
+            --speichern build/test.fuffakm \
             --out build/test_akm_bibliothek.xlsx
+          # Rundlauf: gesicherte Liste neu öffnen und wieder exportieren – muss gleich sein
+          "$APP/Contents/MacOS/AKMListe" --cli --projekt build/test.fuffakm --out build/test_akm_projekt.xlsx
           python3 Tests/check_xlsx.py build/test_akm.xlsx klein
           python3 Tests/check_xlsx.py build/test_akm_bibliothek.xlsx bibliothek
+          python3 Tests/check_xlsx.py build/test_akm_projekt.xlsx bibliothek
           python3 Tests/check_xlsx.py build/test_akm_viele.xlsx viele
 
       - name: Suchtest MusicBrainz (echte Abfrage)

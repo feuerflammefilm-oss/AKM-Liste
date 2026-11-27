@@ -13,6 +13,11 @@ Teil der FuFF Tools (Converter, Transcriber, AKM-Liste, Schnittliste, Text- & Di
   fragt vorher nach, sendet nur Titel/Dateinamen, überschreibt nie eigene Eingaben
 - **Produktionsdaten** (Titel, Produktionsnummer, Regie …) einmal eingeben und als `.fuffprod` mit den
   anderen FuFF-Tools teilen
+- **Bibliotheksmusik** (Universal Production Music): Titel, Fassung, Komponisten (Nachnamen), Album-Code und
+  Track-ID aus dem Dateinamen; Avid-Endungen wie „.COPY.01“ werden entfernt
+- **„Nicht in die AKM-Liste“** für Geräusche oder Originalton-Gesang
+- **Sichern & Öffnen** (⌘S / ⌘O): Die AKM-Liste wird als `.fuffakm` gespeichert – inklusive EDL, aller Eingaben
+  und Produktionsdaten; funktioniert auch, wenn die EDL inzwischen verschoben wurde
 - **Export** in die ORF-Vorlage (Excel), mit Fortschrittsanzeige; über 49 Werke werden Zeilen angehängt
 
 Läuft auf **Apple Silicon und Intel ab macOS 13**. Eingaben werden automatisch gespeichert.

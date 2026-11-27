@@ -18,9 +18,15 @@ final class AppModel: ObservableObject {
     @Published var rate: FrameRate = .standard { didSet { if oldValue != rate { reparse() } } }
     @Published var audioTracks: [String] = []
     @Published var trackExamples: [String: [String]] = [:]
-    @Published var musicTracks: Set<String> = [] { didSet { recompute() } }
+    @Published var musicTracks: Set<String> = [] { didSet { recompute(); if oldValue != musicTracks { markDirty() } } }
     @Published var works: [MusicWork] = []
-    @Published var produktion = Produktionsdaten.lastUsed() { didSet { produktion.rememberAsLastUsed() } }
+    @Published var produktion = Produktionsdaten.lastUsed().nurFirma {
+        didSet { produktion.rememberAsLastUsed(); if oldValue != produktion { markDirty() } }
+    }
+    @Published var projectURL: URL?
+    @Published var dirty = false
+    private var edlTexts: [URL: String] = [:]
+    private var edlOriginalPaths: [URL: String] = [:]
     @Published var selection: MusicWork.ID?
     @Published var candidates: [String: [ResearchCandidate]] = [:]
     @Published var researchLog: [ResearchLog] = []
@@ -30,6 +36,8 @@ final class AppModel: ObservableObject {
     @Published var showTrackSheet = false
     @Published var showProduktion = false
     private var cancelRequested = false
+    private var loading = false
+    func markDirty() { if !loading && !edls.isEmpty { dirty = true } }
     private var saved: [String: MusicWork] = [:]
 
     var warnings: [String] { edls.flatMap { f in f.warnings.map { "\(f.url.lastPathComponent): \($0)" } } }
@@ -39,10 +47,19 @@ final class AppModel: ObservableObject {
     // MARK: EDL laden
 
     func open(_ urls: [URL]) {
+        if let proj = urls.first(where: { $0.pathExtension.lowercased() == AKMProjekt.fileExtension }) {
+            openProject(proj)
+            return
+        }
         let edlURLs = urls.filter { ["edl", "txt"].contains($0.pathExtension.lowercased()) }
         guard !edlURLs.isEmpty else { return }
         let all = Array(Set(edls.map(\.url) + edlURLs)).sorted { $0.lastPathComponent < $1.lastPathComponent }
-        if edls.isEmpty, let first = all.first { rate = EDLParser.suggestedRate(first) }
+        if edls.isEmpty {
+            produktion = Produktionsdaten.lastUsed().nurFirma   // neuer Film: keine Kopfdaten des vorigen Films
+            projectURL = nil
+            if let first = all.first { rate = EDLParser.suggestedRate(first) }
+        }
+        dirty = true
         loadSaved(for: all)
         parse(all)
         let suggested = MusicAnalysis.suggestedMusicTracks(edls.flatMap(\.events))
@@ -53,12 +70,57 @@ final class AppModel: ObservableObject {
     func closeAll() {
         persist()
         edls = []; works = []; audioTracks = []; musicTracks = []; candidates = [:]; researchLog = []; selection = nil
+        searchStatus = [:]; projectURL = nil; dirty = false; edlTexts = [:]; edlOriginalPaths = [:]
+        produktion = Produktionsdaten.lastUsed().nurFirma
+    }
+
+    // MARK: Projekt speichern / öffnen (.fuffakm)
+
+    var windowTitle: String {
+        let name = projectURL?.deletingPathExtension().lastPathComponent
+            ?? (produktion.sendetitel.isEmpty ? "FuFF AKM-Liste" : produktion.sendetitel)
+        return dirty && !edls.isEmpty ? "\(name) – bearbeitet" : name
+    }
+
+    func saveProject(to url: URL) throws {
+        for w in works { saved[w.key] = w }
+        let p = AKMProjekt(
+            edls: edls.map { f in
+                AKMProjekt.EDLDatei(name: f.url.lastPathComponent, pfad: edlOriginalPaths[f.url] ?? f.url.path,
+                                    inhalt: edlTexts[f.url] ?? ((try? EDLParser.readText(f.url)) ?? ""))
+            },
+            bildrate: rate.label, musikspuren: musicTracks.sorted(), werke: works, produktion: produktion)
+        try p.save(to: url)
+        projectURL = url
+        dirty = false
+    }
+
+    func openProject(_ url: URL) {
+        do {
+            let p = try AKMProjekt.load(from: url)
+            let files = try p.materializeEDLs()
+            loading = true
+            defer { loading = false }
+            closeAll()
+            if let r = FrameRate.byLabel(p.bildrate) { rate = r }
+            saved = Dictionary(p.werke.map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a })
+            for (u, e) in zip(files, p.edls) { edlOriginalPaths[u] = e.pfad }
+            parse(files)
+            musicTracks = Set(p.musikspuren)
+            produktion = p.produktion
+            projectURL = url
+            dirty = false
+        } catch {
+            busy = BusyState(title: "AKM-Liste öffnen", detail: url.lastPathComponent, error:
+                                "Datei konnte nicht gelesen werden: \(error.localizedDescription)")
+        }
     }
 
     private func parse(_ urls: [URL]) {
         var files: [EDLFile] = []
         for (n, u) in urls.enumerated() {
             let prefix = urls.count > 1 ? "\(u.deletingPathExtension().lastPathComponent) · " : ""
+            if edlTexts[u] == nil, let t = try? EDLParser.readText(u) { edlTexts[u] = t }
             do { files.append(try EDLParser.parse(u, rate: rate, trackPrefix: prefix)) }
             catch { var f = EDLFile(url: u); f.warnings = ["Datei nicht lesbar: \(error.localizedDescription)"]; files.append(f) }
             _ = n
@@ -94,6 +156,7 @@ final class AppModel: ObservableObject {
                 for f in ["beitrag", "titel", "interpret", "komponist", "bearbeiter", "autor", "verlag"]
                 where Self.value(w, f) != Self.value(self.works[i], f) { w.quellen[f] = "Nutzer" }
                 self.works[i] = w
+                self.markDirty()
                 self.persist()
             })
     }
@@ -234,6 +297,7 @@ final class AppModel: ObservableObject {
             researchLog.append(ResearchLog(url: "", anfrage: c.titel, ergebnis: error.localizedDescription))
         }
         candidates[key] = nil
+        markDirty()
         if let w = works.first(where: { $0.key == key }) {
             let got = [("Komponist", w.komponist), ("Verlag/Label", w.verlag), ("Album", w.beitrag)]
                 .filter { !$0.1.isEmpty }.map(\.0)

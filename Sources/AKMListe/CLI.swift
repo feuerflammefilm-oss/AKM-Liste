@@ -41,6 +41,8 @@ enum CLI {
         var out: URL?
         var prod = Produktionsdaten()
         var exclude: Set<String> = []
+        var saveTo: URL?
+        var projectIn: URL?
         var i = 1
         func next() -> String? { i += 1; return i < args.count ? args[i] : nil }
         while i < args.count {
@@ -50,6 +52,8 @@ enum CLI {
             case "--rate": if let v = next(), let r = FrameRate.byLabel(v) { rate = r }
             case "--out": if let v = next() { out = URL(fileURLWithPath: v) }
             case "--ausschliessen": if let v = next() { exclude.insert(v) }
+            case "--speichern": if let v = next() { saveTo = URL(fileURLWithPath: v) }
+            case "--projekt": if let v = next() { projectIn = URL(fileURLWithPath: v) }
             case "--produktion":
                 if let v = next() {
                     do { prod = try Produktionsdaten.load(from: URL(fileURLWithPath: v)) }
@@ -60,6 +64,16 @@ enum CLI {
             i += 1
         }
         do {
+            var previous: [String: MusicWork] = [:]
+            if let pin = projectIn {
+                let p = try AKMProjekt.load(from: pin)
+                edls = try p.materializeEDLs()
+                tracks = Set(p.musikspuren)
+                if let r = FrameRate.byLabel(p.bildrate) { rate = r }
+                prod = p.produktion
+                previous = Dictionary(p.werke.map { ($0.key, $0) }, uniquingKeysWith: { a, _ in a })
+                print("Projekt geladen: \(pin.lastPathComponent) (\(p.werke.count) Werke)")
+            }
             guard let out, !edls.isEmpty else {
                 FileHandle.standardError.write(Data("Aufruf: --cli --edl DATEI --tracks A1,A2 --out LISTE.xlsx\n".utf8))
                 exit(2)
@@ -71,10 +85,17 @@ enum CLI {
                 events += f.events
             }
             if tracks.isEmpty { tracks = MusicAnalysis.suggestedMusicTracks(events) }
-            var works = MusicAnalysis.works(from: events, musicTracks: tracks, rate: rate)
+            var works = MusicAnalysis.works(from: events, musicTracks: tracks, rate: rate, previous: previous)
             for i in works.indices where exclude.contains(works[i].key) { works[i].ausschliessen = true }
             for w in works {
                 print("\(MusicAnalysis.mmss(w.seconds(rate: rate)))\t\(w.uses)×\t\(w.titel)\t\(w.komponist)\(w.ausschliessen ? "\t(ausgeschlossen)" : "")")
+            }
+            if let saveTo {
+                let p = AKMProjekt(edls: try edls.map { u in
+                    AKMProjekt.EDLDatei(name: u.lastPathComponent, pfad: u.path, inhalt: try EDLParser.readText(u))
+                }, bildrate: rate.label, musikspuren: tracks.sorted(), werke: works, produktion: prod)
+                try p.save(to: saveTo)
+                print("Gesichert: \(saveTo.lastPathComponent)")
             }
             try AKMExport.write(works: works.filter { !$0.ausschliessen }, rate: rate, produktion: prod, to: out) { done, total, what in
                 print("[\(done)/\(total)] \(what)")

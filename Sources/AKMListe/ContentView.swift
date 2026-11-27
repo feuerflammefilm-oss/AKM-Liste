@@ -12,7 +12,11 @@ struct ContentView: View {
             if model.edls.isEmpty { dropZone } else { main }
         }
         .onDrop(of: [.fileURL], isTargeted: $dropTargeted) { providers in
-            Self.urls(from: providers) { model.open($0) }
+            Self.urls(from: providers) { urls in
+                if urls.contains(where: { $0.pathExtension.lowercased() == AKMProjekt.fileExtension }),
+                   !Self.confirmDiscard(model) { return }
+                model.open(urls)
+            }
             return true
         }
         .overlay {
@@ -24,8 +28,11 @@ struct ContentView: View {
         }
         .toolbar {
             ToolbarItemGroup {
-                Button { Self.openPanel(model) } label: { Label("EDL öffnen", systemImage: "doc.badge.plus") }
-                    .help("EDL aus dem Schnitt öffnen (⌘O) – mehrere EDLs möglich, z. B. eine je Spur")
+                Button { Self.openPanel(model) } label: { Label("Öffnen", systemImage: "doc.badge.plus") }
+                    .help("EDL aus dem Schnitt oder gespeicherte AKM-Liste (.fuffakm) öffnen (⌘O)")
+                Button { Self.save(model, asNew: false) } label: { Label("Sichern", systemImage: "square.and.arrow.down") }
+                    .disabled(model.edls.isEmpty)
+                    .help("AKM-Liste mit allen Eingaben sichern (⌘S) – später wieder öffnen und weiterarbeiten")
                 Button { model.showProduktion = true } label: { Label("Produktionsdaten", systemImage: "person.text.rectangle") }
                     .help("Kopfdaten der Liste (Titel, Produktionsnummer, Regie …) – auch für andere FuFF-Tools")
                 Button { confirmResearch = true } label: { Label("Recherche", systemImage: "magnifyingglass") }
@@ -37,6 +44,7 @@ struct ContentView: View {
                     .help("ORF-Musikaufstellung als Excel-Datei speichern (⌘E)")
             }
         }
+        .navigationTitle(model.windowTitle)
         .sheet(isPresented: $model.showTrackSheet) { TrackSheet().environmentObject(model) }
         .sheet(isPresented: $model.showProduktion) { ProduktionSheet().environmentObject(model) }
         .sheet(item: Binding(get: { model.busy.map { BusyBox(state: $0) } }, set: { if $0 == nil { model.busy = nil } })) { _ in
@@ -56,9 +64,9 @@ struct ContentView: View {
         VStack(spacing: 18) {
             Image(systemName: "music.note.list").font(.system(size: 56)).foregroundStyle(.secondary)
             Text("EDL hierher ziehen").font(.title2.weight(.semibold))
-            Text("Die App liest die Musikspuren, rechnet jedes Stück zu einer Gesamtdauer zusammen\nund füllt die ORF-Musikaufstellung.")
+            Text("Die App liest die Musikspuren, rechnet jedes Stück zu einer Gesamtdauer zusammen\nund füllt die ORF-Musikaufstellung. Gespeicherte AKM-Listen (.fuffakm) lassen sich ebenso öffnen.")
                 .multilineTextAlignment(.center).foregroundStyle(.secondary)
-            Button("EDL öffnen …") { Self.openPanel(model) }.controlSize(.large)
+            Button("Öffnen …") { Self.openPanel(model) }.controlSize(.large)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .padding(40)
@@ -117,13 +125,64 @@ struct ContentView: View {
 
     // MARK: Dateien
 
+    static var projectType: UTType { UTType(filenameExtension: AKMProjekt.fileExtension) ?? .json }
+
     static func openPanel(_ model: AppModel) {
         let p = NSOpenPanel()
         p.allowsMultipleSelection = true
         p.canChooseDirectories = false
-        p.allowedContentTypes = [UTType(filenameExtension: "edl") ?? .plainText, .plainText]
-        p.message = "EDL(s) aus dem Schnitt wählen"
-        if p.runModal() == .OK { model.open(p.urls) }
+        p.allowedContentTypes = [UTType(filenameExtension: "edl") ?? .plainText, .plainText, projectType]
+        p.message = "EDL(s) aus dem Schnitt oder eine gespeicherte AKM-Liste (.fuffakm) wählen"
+        if p.runModal() == .OK {
+            if p.urls.contains(where: { $0.pathExtension.lowercased() == AKMProjekt.fileExtension }) {
+                guard confirmDiscard(model) else { return }
+            }
+            model.open(p.urls)
+        }
+    }
+
+    /// true = weitermachen (gesichert, verworfen oder nichts zu sichern)
+    static func confirmDiscard(_ model: AppModel) -> Bool {
+        guard model.dirty, !model.edls.isEmpty else { return true }
+        let a = NSAlert()
+        a.messageText = "Änderungen an „\(model.windowTitle.replacingOccurrences(of: " – bearbeitet", with: ""))“ sichern?"
+        a.informativeText = "Sonst gehen Eingaben verloren, die noch nicht gesichert sind."
+        a.addButton(withTitle: "Sichern")
+        a.addButton(withTitle: "Nicht sichern")
+        a.addButton(withTitle: "Abbrechen")
+        switch a.runModal() {
+        case .alertFirstButtonReturn: return save(model, asNew: false)
+        case .alertSecondButtonReturn: return true
+        default: return false
+        }
+    }
+
+    static func newList(_ model: AppModel) {
+        guard confirmDiscard(model) else { return }
+        model.closeAll()
+    }
+
+    @discardableResult
+    static func save(_ model: AppModel, asNew: Bool) -> Bool {
+        guard !model.edls.isEmpty else { return false }
+        var target = asNew ? nil : model.projectURL
+        if target == nil {
+            let p = NSSavePanel()
+            p.allowedContentTypes = [projectType]
+            let t = model.produktion.sendetitel.isEmpty ? "AKM-Liste" : model.produktion.sendetitel
+            p.nameFieldStringValue = "\(t).\(AKMProjekt.fileExtension)"
+            p.message = "AKM-Liste sichern – enthält EDL, Eingaben und Produktionsdaten"
+            guard p.runModal() == .OK, let u = p.url else { return false }
+            target = u
+        }
+        do {
+            try model.saveProject(to: target!)
+            return true
+        } catch {
+            let a = NSAlert(error: error)
+            a.runModal()
+            return false
+        }
     }
 
     private func exportPanel() {
