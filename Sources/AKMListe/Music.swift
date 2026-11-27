@@ -40,10 +40,21 @@ enum MusicAnalysis {
     private static let channelSuffix = try! NSRegularExpression(
         pattern: #"([ ._-](L|R|LEFT|RIGHT|A\d|CH\d|\d{1,2}CH)|\s*\((STEREO|MONO|L|R)\))$"#, options: [.caseInsensitive])
 
+    /// Avid-Kopien/Subclips: „.COPY.01“, „.NEW.01“, „.SYNC.01“ … (auch mehrfach, z. B. „.WAV.COPY.01“)
+    private static let avidSuffix = try! NSRegularExpression(
+        pattern: #"\.(COPY|NEW|SYNC|SUB|MC|DUP|EXPORTED)(\.\d+)?$"#, options: [.caseInsensitive])
+
     static func key(for clip: String) -> String {
         var name = clip.trimmingCharacters(in: .whitespaces)
-        let ext = (name as NSString).pathExtension.lowercased()
-        if audioExt.contains(ext) { name = (name as NSString).deletingPathExtension }
+        var before = ""
+        while before != name {               // Avid-Endungen und Dateiendungen abwechselnd entfernen
+            before = name
+            let ns = name as NSString
+            name = avidSuffix.stringByReplacingMatches(in: name, range: NSRange(location: 0, length: ns.length),
+                                                       withTemplate: "").trimmingCharacters(in: .whitespaces)
+            let ext = (name as NSString).pathExtension.lowercased()
+            if audioExt.contains(ext) { name = (name as NSString).deletingPathExtension.trimmingCharacters(in: .whitespaces) }
+        }
         var prev = ""
         while prev != name {
             prev = name

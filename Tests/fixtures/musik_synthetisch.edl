@@ -13,3 +13,6 @@ FCM: NON-DROP FRAME
 004  MUS01    AA    C        00:03:20:00 00:03:25:21 10:00:31:05 10:00:37:01
 * FROM CLIP NAME:  Donauwalzer_Probe.wav
 
+
+005  MUS01    A     C        00:00:02:00 00:00:04:00 10:00:02:00 10:00:04:00
+* FROM CLIP NAME:  Donauwalzer_Probe.wav.COPY.01
