@@ -35,9 +35,9 @@ struct ContentView: View {
                     .help("AKM-Liste mit allen Eingaben sichern (⌘S) – später wieder öffnen und weiterarbeiten")
                 Button { model.showProduktion = true } label: { Label("Produktionsdaten", systemImage: "person.text.rectangle") }
                     .help("Kopfdaten der Liste (Titel, Produktionsnummer, Regie …) – auch für andere FuFF-Tools")
-                Button { confirmResearch = true } label: { Label("Recherche", systemImage: "magnifyingglass") }
+                Button { confirmResearch = true } label: { Label("Infos online abrufen", systemImage: "arrow.down.doc") }
                     .disabled(model.researchTargets.isEmpty || model.busy != nil)
-                    .help("Fehlende Angaben (Komponist, Verlag …) online bei MusicBrainz suchen – fragt vorher nach")
+                    .help("Startet die Online-Suche (MusicBrainz) für alle Werke mit offenen Angaben und holt Komponist, Verlag und Label als Vorschläge – fragt vorher nach")
                 Button { exportPanel() } label: { Label("Exportieren", systemImage: "square.and.arrow.up") }
                     .disabled(model.exportWorks.isEmpty || model.busy != nil)
                     .keyboardShortcut("e", modifiers: .command)
@@ -335,13 +335,14 @@ struct DetailView: View {
     /// Gesendet wird nur der Suchtext, der unten angezeigt wird.
     private func linkBox(_ w: MusicWork) -> some View {
         let q = LinkSearch.query(w)
+        let web = LinkSearch.webQuery(w)
         return GroupBox("Im Browser nachschlagen") {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    Button("Websuche") { open(LinkSearch.google(q)) }
-                        .help("Google-Suche nach Titel und Interpret")
-                    Button("KI-Suche") { open(LinkSearch.aiMode(LinkSearch.aiQuery(w))) }
-                        .help("Google KI-Modus: fragt nach Komponist und Verlag – Antwort ist ein Hinweis, kein Beleg")
+                    Button { open(LinkSearch.google(web)) } label: {
+                        Label("Websuche starten: Komponist, Verlag, Label", systemImage: "safari")
+                    }
+                    .help("Google-Suche mit Album und Titel plus „Album Komponist Verlag Label“ – die KI-Übersicht von Google zeigt die Angaben meist gleich oben")
                     Button("Discogs") { open(LinkSearch.discogs(q)) }
                     Button("Amazon") { open(LinkSearch.amazon(q)) }
                         .help("Amazon.de – in den Produktdetails stehen oft Label und Komponist")
@@ -358,7 +359,7 @@ struct DetailView: View {
                         .help("Öffnet die UPM-Website und kopiert die Track-ID – dort ins Suchfeld einfügen (⌘V)")
                     }
                 }
-                Text("Suchtext: „\(q)“ – die Seiten öffnen sich im Browser, Ergebnisse bitte selbst prüfen und eintragen. KI-Antworten können falsch sein (z. B. Notenvertrieb statt Musikverlag).")
+                Text("Websuche sendet: „\(web)“ · Discogs/Amazon: „\(q)“. Die Seiten öffnen sich im Browser, Ergebnisse bitte selbst prüfen und eintragen. KI-Antworten können falsch sein (z. B. Notenvertrieb statt Musikverlag).")
                     .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading).padding(4)
@@ -388,7 +389,7 @@ struct DetailView: View {
                     }
                 }
                 HStack(spacing: 8) {
-                    Button(model.candidates[key]?.isEmpty == false ? "Erneut suchen" : "Dieses Werk bei MusicBrainz suchen") {
+                    Button(model.candidates[key]?.isEmpty == false ? "Erneut suchen" : "Infos zu diesem Werk online abrufen (MusicBrainz)") {
                         model.researchOne(key)
                     }
                     .disabled(model.searching.contains(key))

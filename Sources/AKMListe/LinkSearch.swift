@@ -10,11 +10,11 @@ enum LinkSearch {
         return [w.titel, w.interpret].filter { !$0.isEmpty }.joined(separator: " ")
     }
 
-    /// Für die KI-Suche: Frage gezielt auf Komponist und Verlag erweitern.
-    static func aiQuery(_ w: MusicWork) -> String {
-        var parts = [query(w)]
-        if !w.bibliothek.isEmpty { parts.append(w.bibliothek) }
-        parts.append("Komponist Verlag")
+    /// Websuche: Beitrag/Album + Titel (+ Interpret, falls nicht schon im Titel) und feste Suchbegriffe.
+    static func webQuery(_ w: MusicWork) -> String {
+        var parts = [w.beitrag, w.titel].filter { !$0.isEmpty }
+        if !w.interpret.isEmpty && !w.titel.localizedCaseInsensitiveContains(w.interpret) { parts.append(w.interpret) }
+        parts.append("Album Komponist Verlag Label")
         return parts.joined(separator: " ")
     }
 
@@ -31,8 +31,6 @@ enum LinkSearch {
     }
 
     static func google(_ q: String) -> URL { URL(string: "https://www.google.com/search?q=\(enc(q))")! }
-    /// Google KI-Modus (udm=50)
-    static func aiMode(_ q: String) -> URL { URL(string: "https://www.google.com/search?q=\(enc(q))&udm=50")! }
     static func discogs(_ q: String) -> URL { URL(string: "https://www.discogs.com/search/?q=\(enc(q))&type=all")! }
     static func amazon(_ q: String) -> URL { URL(string: "https://www.amazon.de/s?k=\(enc(q))")! }
 }

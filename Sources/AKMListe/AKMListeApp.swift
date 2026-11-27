@@ -27,6 +27,15 @@ struct AKMListeApp: App {
                     .keyboardShortcut("o", modifiers: .command)
             }
             CommandGroup(replacing: .saveItem) {
+                Button("Schließen") {
+                    let win = NSApp.keyWindow
+                    if win?.isSheet == false, !model.edls.isEmpty {
+                        guard ContentView.confirmDiscard(model) else { return }
+                        model.closeAll()
+                    }
+                    win?.performClose(nil)
+                }
+                .keyboardShortcut("w", modifiers: .command)
                 Button("Sichern") { ContentView.save(model, asNew: false) }
                     .keyboardShortcut("s", modifiers: .command)
                     .disabled(model.edls.isEmpty)
