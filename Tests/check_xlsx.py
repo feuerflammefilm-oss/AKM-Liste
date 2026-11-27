@@ -18,6 +18,17 @@ def check(path, mode):
         eq("G15", "Donauwalzer Probe"); eq("AS15", None); eq("AU15", 24)   # 17,96 s + 5,84 s = 23,8 s → 0:24
         eq("G16", "Spannung Loop"); eq("AU16", 7)
         eq("G17", None)
+    elif mode == "bibliothek":
+        eq("G15", "SIGNATION FA FINAL"); eq("S15", None)                    # unbekannt -> leer, nicht geraten
+        eq("G16", "Got That Swing (Instrumental)"); eq("S16", "Berger")
+        eq("A16", "UPM ARX57"); eq("AK16", "Universal Production Music"); eq("AU16", 20)
+        eq("G17", "Tippy Toes (Instrumental)")                              # .COPY.01 entfernt
+        eq("G18", "NILS FRAHM - AMBRE")
+        eq("G19", "Smokin The Swing (Instrumental)"); eq("S19", "Bragg, Buster, Cottam, Prince, Walker")
+        eq("A19", "UPM BR729")
+        eq("G20", "DUSTIN O'HALLORAN - WE MOVE LIGHTLY")
+        eq("G21", "Got The Goods (Instrumental)"); eq("S21", "Hutchings")   # RFA FX3 ausgeschlossen
+        eq("G22", None)
     else:
         eq("G15", "Testwerk 01"); eq("AU15", 15)      # 10 s + 5 s zusammengerechnet
         eq("G16", "Testwerk 02"); eq("AU16", 10)      # Stereo nicht doppelt

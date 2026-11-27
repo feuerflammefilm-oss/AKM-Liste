@@ -24,11 +24,47 @@ struct MusicWork: Identifiable, Codable, Hashable {
     var musikvideo = false
     var live = false
     var quellen: [String: String] = [:]   // Feld -> Herkunft der Angabe ("Dateiname", "MusicBrainz", "Nutzer")
+    var ausschliessen = false       // z. B. Geräusche, Originalton-Gesang: nicht in die AKM-Liste
+    var bibliothek = ""             // Production-Music-Bibliothek (z. B. Universal Production Music)
+    var trackID = ""                // Track-ID der Bibliothek aus dem Dateinamen
+
+    init(key: String) { self.key = key }
+
+    enum CodingKeys: String, CodingKey {
+        case key, clipNames, firstFrame, totalFrames, uses, tracks, beitrag, titel, interpret, komponist, bearbeiter,
+             autor, verlag, musikvideo, live, quellen, ausschliessen, bibliothek, trackID
+    }
+
+    /// Tolerant: gespeicherte Eingaben älterer Versionen (ohne neue Felder) bleiben lesbar.
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        key = try c.decode(String.self, forKey: .key)
+        clipNames = try c.decodeIfPresent([String].self, forKey: .clipNames) ?? []
+        firstFrame = try c.decodeIfPresent(Int.self, forKey: .firstFrame) ?? 0
+        totalFrames = try c.decodeIfPresent(Int.self, forKey: .totalFrames) ?? 0
+        uses = try c.decodeIfPresent(Int.self, forKey: .uses) ?? 0
+        tracks = try c.decodeIfPresent([String].self, forKey: .tracks) ?? []
+        beitrag = try c.decodeIfPresent(String.self, forKey: .beitrag) ?? ""
+        titel = try c.decodeIfPresent(String.self, forKey: .titel) ?? ""
+        interpret = try c.decodeIfPresent(String.self, forKey: .interpret) ?? ""
+        komponist = try c.decodeIfPresent(String.self, forKey: .komponist) ?? ""
+        bearbeiter = try c.decodeIfPresent(String.self, forKey: .bearbeiter) ?? ""
+        autor = try c.decodeIfPresent(String.self, forKey: .autor) ?? ""
+        verlag = try c.decodeIfPresent(String.self, forKey: .verlag) ?? ""
+        musikvideo = try c.decodeIfPresent(Bool.self, forKey: .musikvideo) ?? false
+        live = try c.decodeIfPresent(Bool.self, forKey: .live) ?? false
+        quellen = try c.decodeIfPresent([String: String].self, forKey: .quellen) ?? [:]
+        ausschliessen = try c.decodeIfPresent(Bool.self, forKey: .ausschliessen) ?? false
+        bibliothek = try c.decodeIfPresent(String.self, forKey: .bibliothek) ?? ""
+        trackID = try c.decodeIfPresent(String.self, forKey: .trackID) ?? ""
+    }
 
     func seconds(rate: FrameRate) -> Int { Int((Double(totalFrames) / rate.fps).rounded()) }
     var offen: [String] {
+        if ausschliessen { return [] }
         var o: [String] = []
         if komponist.isEmpty { o.append("Komponist") }
+        else if (quellen["komponist"] ?? "").hasPrefix("Dateiname") { o.append("Komponist prüfen") }
         if verlag.isEmpty { o.append("Verlag") }
         if quellen["titel"] == "Dateiname" { o.append("Titel prüfen") }
         return o
@@ -114,8 +150,23 @@ enum MusicAnalysis {
             w.uses = uses
             w.tracks = Array(Set(evs.map(\.track))).sorted()
             if w.titel.isEmpty {
-                w.titel = titleSuggestion(k)
-                w.quellen["titel"] = "Dateiname"
+                if let lib = LibraryName.parse(k) {
+                    // Production Music: Angaben aus dem Namensschema der Bibliothek (als Vorschlag markiert)
+                    w.titel = lib.titel
+                    w.quellen["titel"] = "Dateiname (\(lib.bibliothek))"
+                    w.bibliothek = lib.bibliothek
+                    w.trackID = lib.trackID
+                    if !lib.album.isEmpty { w.beitrag = lib.album; w.quellen["beitrag"] = "Dateiname (\(lib.bibliothek))" }
+                    if !lib.komponisten.isEmpty {
+                        w.komponist = lib.komponisten
+                        w.quellen["komponist"] = "Dateiname (\(lib.bibliothek), nur Nachnamen)"
+                    }
+                    w.verlag = lib.bibliothek
+                    w.quellen["verlag"] = "Dateiname (Bibliothek – Verlag prüfen)"
+                } else {
+                    w.titel = titleSuggestion(k)
+                    w.quellen["titel"] = "Dateiname"
+                }
             }
             result.append(w)
         }

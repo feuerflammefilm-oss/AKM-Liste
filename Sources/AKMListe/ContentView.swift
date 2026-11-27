@@ -100,6 +100,9 @@ struct ContentView: View {
     private var statusBar: some View {
         HStack {
             Text("\(model.works.count) Werke")
+            if model.excludedCount > 0 {
+                Text("· \(model.excludedCount) nicht in der Liste").foregroundStyle(.secondary)
+            }
             if model.openCount > 0 {
                 Text("· \(model.openCount) mit offenen Angaben").foregroundStyle(.orange)
             }
@@ -158,7 +161,9 @@ struct WorkTable: View {
         Table(model.works, selection: $model.selection) {
             TableColumn("Nr.") { w in Text("\((model.works.firstIndex(of: w) ?? 0) + 1)").monospacedDigit() }
                 .width(min: 30, ideal: 36, max: 44)
-            TableColumn("Titel") { w in Text(w.titel).lineLimit(1) }
+            TableColumn("Titel") { w in
+                Text(w.titel).lineLimit(1).strikethrough(w.ausschliessen).foregroundStyle(w.ausschliessen ? .secondary : .primary)
+            }
                 .width(min: 160, ideal: 260)
             TableColumn("Gesamt") { w in Text(MusicAnalysis.mmss(w.seconds(rate: model.rate))).monospacedDigit() }
                 .width(min: 50, ideal: 60, max: 70)
@@ -167,7 +172,11 @@ struct WorkTable: View {
             TableColumn("Komponist") { w in Text(w.komponist).lineLimit(1) }
                 .width(min: 100, ideal: 150)
             TableColumn("Offen") { w in
-                Text(w.offen.joined(separator: ", ")).foregroundStyle(.orange).lineLimit(1)
+                if w.ausschliessen {
+                    Text("nicht in der Liste").foregroundStyle(.secondary)
+                } else {
+                    Text(w.offen.joined(separator: ", ")).foregroundStyle(.orange).lineLimit(1)
+                }
             }
             .width(min: 80, ideal: 140)
         }
@@ -186,6 +195,13 @@ struct DetailView: View {
                     Text(w.wrappedValue.titel).font(.title3.weight(.semibold)).textSelection(.enabled)
                     Text("Gesamtdauer \(MusicAnalysis.mmss(w.wrappedValue.seconds(rate: model.rate))) aus \(w.wrappedValue.uses) Einsatz/Einsätzen · Spuren \(w.wrappedValue.tracks.joined(separator: ", "))")
                         .font(.callout).foregroundStyle(.secondary)
+                    Toggle("Nicht in die AKM-Liste (z. B. Geräusch, Originalton-Gesang)", isOn: w.ausschliessen)
+                        .help("Das Werk bleibt hier sichtbar, wird aber nicht exportiert.")
+                    if !w.wrappedValue.bibliothek.isEmpty {
+                        Label("Bibliotheksmusik: \(w.wrappedValue.bibliothek)\(w.wrappedValue.trackID.isEmpty ? "" : " · Track-ID \(w.wrappedValue.trackID)") – Angaben aus dem Dateinamen, Komponisten nur mit Nachnamen.",
+                              systemImage: "building.columns")
+                            .font(.callout).foregroundStyle(.secondary)
+                    }
                     GroupBox("Angaben für die AKM-Liste") {
                         Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 8) {
                             field("Beitrag / Album", w.beitrag, w.wrappedValue.quellen["beitrag"])
@@ -205,7 +221,8 @@ struct DetailView: View {
                         }
                         .padding(6)
                     }
-                    researchBox(key: key)
+                    if w.wrappedValue.bibliothek.isEmpty { researchBox(key: key) }
+                    linkBox(w.wrappedValue)
                     GroupBox("Clips in der EDL") {
                         VStack(alignment: .leading, spacing: 2) {
                             ForEach(w.wrappedValue.clipNames, id: \.self) { Text($0).font(.caption).textSelection(.enabled) }
@@ -233,6 +250,37 @@ struct DetailView: View {
                         .font(.caption2).foregroundStyle(s == "Dateiname" ? .orange : .secondary)
                 }
             }
+        }
+    }
+
+    /// Manuell nachschlagen: öffnet den Browser (kein automatisches Auslesen fremder Seiten).
+    private func linkBox(_ w: MusicWork) -> some View {
+        let q = [w.titel, w.interpret, w.trackID].filter { !$0.isEmpty }.joined(separator: " ")
+        let enc = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        return GroupBox("Im Browser nachschlagen") {
+            VStack(alignment: .leading, spacing: 6) {
+                HStack {
+                    if !w.bibliothek.isEmpty {
+                        Button("Bei UPM suchen") {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(w.trackID.isEmpty ? w.titel : w.trackID, forType: .string)
+                            NSWorkspace.shared.open(URL(string: "https://www.universalproductionmusic.com/")!)
+                        }
+                        .help("Öffnet die UPM-Website und kopiert die Track-ID – dort ins Suchfeld einfügen (⌘V)")
+                    }
+                    Button("Websuche") {
+                        let extra = w.bibliothek.isEmpty ? "" : " \(w.bibliothek)"
+                        let e = (q + extra).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+                        NSWorkspace.shared.open(URL(string: "https://duckduckgo.com/?q=\(e)")!)
+                    }
+                    Button("Discogs") { NSWorkspace.shared.open(URL(string: "https://www.discogs.com/search/?q=\(enc)&type=all")!) }
+                    Button("MusicBrainz") { NSWorkspace.shared.open(URL(string: "https://musicbrainz.org/search?query=\(enc)&type=recording")!) }
+                }
+                Text(w.bibliothek.isEmpty ? "Öffnet die Suche im Browser – Ergebnisse bitte selbst übernehmen."
+                     : "Bei „Bei UPM suchen“ ist die Track-ID schon kopiert: auf der UPM-Seite ins Suchfeld einfügen.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading).padding(4)
         }
     }
 

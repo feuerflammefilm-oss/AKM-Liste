@@ -34,6 +34,7 @@ final class AppModel: ObservableObject {
 
     var warnings: [String] { edls.flatMap { f in f.warnings.map { "\(f.url.lastPathComponent): \($0)" } } }
     var openCount: Int { works.filter { !$0.offen.isEmpty }.count }
+    var excludedCount: Int { works.filter(\.ausschliessen).count }
 
     // MARK: EDL laden
 
@@ -138,7 +139,11 @@ final class AppModel: ObservableObject {
 
     // MARK: Recherche
 
-    var researchTargets: [MusicWork] { works.filter { $0.komponist.isEmpty || $0.verlag.isEmpty } }
+    /// Online-Recherche nur für veröffentlichte Musik: Bibliotheksmusik (UPM …) steht nicht in MusicBrainz.
+    var researchTargets: [MusicWork] {
+        works.filter { !$0.ausschliessen && $0.bibliothek.isEmpty && ($0.komponist.isEmpty || $0.verlag.isEmpty) }
+    }
+    var exportWorks: [MusicWork] { works.filter { !$0.ausschliessen } }
 
     func researchAll() {
         let targets = researchTargets
@@ -241,7 +246,7 @@ final class AppModel: ObservableObject {
     // MARK: Export
 
     func export(to url: URL) {
-        let works = self.works, rate = self.rate, prod = self.produktion
+        let works = self.exportWorks, rate = self.rate, prod = self.produktion
         busy = BusyState(title: "AKM-Liste exportieren", total: works.count + 3)
         Task.detached(priority: .userInitiated) {
             do {
