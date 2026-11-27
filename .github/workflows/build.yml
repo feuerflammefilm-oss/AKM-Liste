@@ -39,6 +39,15 @@ jobs:
             --out build/test_akm_bibliothek.xlsx
           # Rundlauf: gesicherte Liste neu öffnen und wieder exportieren – muss gleich sein
           "$APP/Contents/MacOS/AKMListe" --cli --projekt build/test.fuffakm --out build/test_akm_projekt.xlsx
+          # Löschen: Werk entfernen, sichern, wieder öffnen – darf nicht zurückkommen
+          "$APP/Contents/MacOS/AKMListe" --cli \
+            --edl Tests/fixtures/musik_bibliothek.edl \
+            --tracks A1,A2 --rate 25 --ausschliessen "RFA FX3 0070" --loeschen "NILS FRAHM - AMBRE" \
+            --produktion Tests/fixtures/produktion_test.fuffprod \
+            --speichern build/test_geloescht.fuffakm --out build/test_akm_geloescht.xlsx
+          "$APP/Contents/MacOS/AKMListe" --cli --projekt build/test_geloescht.fuffakm --out build/test_akm_geloescht2.xlsx
+          python3 Tests/check_xlsx.py build/test_akm_geloescht.xlsx geloescht
+          python3 Tests/check_xlsx.py build/test_akm_geloescht2.xlsx geloescht
           python3 Tests/check_xlsx.py build/test_akm.xlsx klein
           python3 Tests/check_xlsx.py build/test_akm_bibliothek.xlsx bibliothek
           python3 Tests/check_xlsx.py build/test_akm_projekt.xlsx bibliothek

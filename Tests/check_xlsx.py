@@ -29,6 +29,12 @@ def check(path, mode):
         eq("G20", "DUSTIN O'HALLORAN - WE MOVE LIGHTLY")
         eq("G21", "Got The Goods (Instrumental)"); eq("S21", "Hutchings")   # RFA FX3 ausgeschlossen
         eq("G22", None)
+    elif mode == "geloescht":                                               # NILS FRAHM gelöscht
+        eq("G17", "Tippy Toes (Instrumental)")
+        eq("G18", "Smokin The Swing (Instrumental)")
+        eq("G19", "DUSTIN O'HALLORAN - WE MOVE LIGHTLY")
+        eq("G20", "Got The Goods (Instrumental)")
+        eq("G21", None)
     else:
         eq("G15", "Testwerk 01"); eq("AU15", 15)      # 10 s + 5 s zusammengerechnet
         eq("G16", "Testwerk 02"); eq("AU16", 10)      # Stereo nicht doppelt

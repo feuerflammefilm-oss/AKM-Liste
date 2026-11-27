@@ -41,6 +41,7 @@ enum CLI {
         var out: URL?
         var prod = Produktionsdaten()
         var exclude: Set<String> = []
+        var remove: Set<String> = []
         var saveTo: URL?
         var projectIn: URL?
         var i = 1
@@ -52,6 +53,7 @@ enum CLI {
             case "--rate": if let v = next(), let r = FrameRate.byLabel(v) { rate = r }
             case "--out": if let v = next() { out = URL(fileURLWithPath: v) }
             case "--ausschliessen": if let v = next() { exclude.insert(v) }
+            case "--loeschen": if let v = next() { remove.insert(v) }
             case "--speichern": if let v = next() { saveTo = URL(fileURLWithPath: v) }
             case "--projekt": if let v = next() { projectIn = URL(fileURLWithPath: v) }
             case "--produktion":
@@ -87,8 +89,9 @@ enum CLI {
             if tracks.isEmpty { tracks = MusicAnalysis.suggestedMusicTracks(events) }
             var works = MusicAnalysis.works(from: events, musicTracks: tracks, rate: rate, previous: previous)
             for i in works.indices where exclude.contains(works[i].key) { works[i].ausschliessen = true }
+            for i in works.indices where remove.contains(works[i].key) { works[i].geloescht = true }
             for w in works {
-                print("\(MusicAnalysis.mmss(w.seconds(rate: rate)))\t\(w.uses)×\t\(w.titel)\t\(w.komponist)\(w.ausschliessen ? "\t(ausgeschlossen)" : "")")
+                print("\(MusicAnalysis.mmss(w.seconds(rate: rate)))\t\(w.uses)×\t\(w.titel)\t\(w.komponist)\(w.ausschliessen ? "\t(ausgeschlossen)" : "")\(w.geloescht ? "\t(gelöscht)" : "")")
             }
             if let saveTo {
                 let p = AKMProjekt(edls: try edls.map { u in
@@ -97,7 +100,7 @@ enum CLI {
                 try p.save(to: saveTo)
                 print("Gesichert: \(saveTo.lastPathComponent)")
             }
-            try AKMExport.write(works: works.filter { !$0.ausschliessen }, rate: rate, produktion: prod, to: out) { done, total, what in
+            try AKMExport.write(works: works.filter { !$0.ausschliessen && !$0.geloescht }, rate: rate, produktion: prod, to: out) { done, total, what in
                 print("[\(done)/\(total)] \(what)")
             }
             print("OK \(works.count) Werke → \(out.path)")

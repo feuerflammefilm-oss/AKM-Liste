@@ -27,12 +27,13 @@ struct MusicWork: Identifiable, Codable, Hashable {
     var ausschliessen = false       // z. B. Geräusche, Originalton-Gesang: nicht in die AKM-Liste
     var bibliothek = ""             // Production-Music-Bibliothek (z. B. Universal Production Music)
     var trackID = ""                // Track-ID der Bibliothek aus dem Dateinamen
+    var geloescht = false           // vom Nutzer aus der Liste gelöscht (bleibt gemerkt, wiederherstellbar)
 
     init(key: String) { self.key = key }
 
     enum CodingKeys: String, CodingKey {
         case key, clipNames, firstFrame, totalFrames, uses, tracks, beitrag, titel, interpret, komponist, bearbeiter,
-             autor, verlag, musikvideo, live, quellen, ausschliessen, bibliothek, trackID
+             autor, verlag, musikvideo, live, quellen, ausschliessen, bibliothek, trackID, geloescht
     }
 
     /// Tolerant: gespeicherte Eingaben älterer Versionen (ohne neue Felder) bleiben lesbar.
@@ -57,11 +58,12 @@ struct MusicWork: Identifiable, Codable, Hashable {
         ausschliessen = try c.decodeIfPresent(Bool.self, forKey: .ausschliessen) ?? false
         bibliothek = try c.decodeIfPresent(String.self, forKey: .bibliothek) ?? ""
         trackID = try c.decodeIfPresent(String.self, forKey: .trackID) ?? ""
+        geloescht = try c.decodeIfPresent(Bool.self, forKey: .geloescht) ?? false
     }
 
     func seconds(rate: FrameRate) -> Int { Int((Double(totalFrames) / rate.fps).rounded()) }
     var offen: [String] {
-        if ausschliessen { return [] }
+        if ausschliessen || geloescht { return [] }
         var o: [String] = []
         if komponist.isEmpty { o.append("Komponist") }
         else if (quellen["komponist"] ?? "").hasPrefix("Dateiname") { o.append("Komponist prüfen") }

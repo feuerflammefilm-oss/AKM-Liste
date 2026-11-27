@@ -39,7 +39,7 @@ struct ContentView: View {
                     .disabled(model.researchTargets.isEmpty || model.busy != nil)
                     .help("Fehlende Angaben (Komponist, Verlag …) online bei MusicBrainz suchen – fragt vorher nach")
                 Button { exportPanel() } label: { Label("Exportieren", systemImage: "square.and.arrow.up") }
-                    .disabled(model.works.isEmpty || model.busy != nil)
+                    .disabled(model.exportWorks.isEmpty || model.busy != nil)
                     .keyboardShortcut("e", modifiers: .command)
                     .help("ORF-Musikaufstellung als Excel-Datei speichern (⌘E)")
             }
@@ -107,7 +107,16 @@ struct ContentView: View {
 
     private var statusBar: some View {
         HStack {
-            Text("\(model.works.count) Werke")
+            Text("\(model.visibleWorks.count) Werke")
+            if !model.deletedWorks.isEmpty {
+                Menu("· \(model.deletedWorks.count) gelöscht") {
+                    ForEach(model.deletedWorks) { w in
+                        Button("„\(w.titel)“ wiederherstellen") { model.restore(w.key) }
+                    }
+                }
+                .menuStyle(.borderlessButton).fixedSize()
+                .help("Gelöschte Werke wieder in die Liste holen")
+            }
             if model.excludedCount > 0 {
                 Text("· \(model.excludedCount) nicht in der Liste").foregroundStyle(.secondary)
             }
@@ -217,8 +226,9 @@ struct WorkTable: View {
     @EnvironmentObject var model: AppModel
 
     var body: some View {
-        Table(model.works, selection: $model.selection) {
-            TableColumn("Nr.") { w in Text("\((model.works.firstIndex(of: w) ?? 0) + 1)").monospacedDigit() }
+        let list = model.visibleWorks
+        Table(list, selection: $model.selection) {
+            TableColumn("Nr.") { w in Text("\((list.firstIndex(of: w) ?? 0) + 1)").monospacedDigit() }
                 .width(min: 30, ideal: 36, max: 44)
             TableColumn("Titel") { w in
                 Text(w.titel).lineLimit(1).strikethrough(w.ausschliessen).foregroundStyle(w.ausschliessen ? .secondary : .primary)
@@ -239,6 +249,11 @@ struct WorkTable: View {
             }
             .width(min: 80, ideal: 140)
         }
+        .contextMenu(forSelectionType: MusicWork.ID.self) { ids in
+            Button("Aus der Liste löschen") { ids.forEach { model.delete($0) } }
+                .disabled(ids.isEmpty)
+        }
+        .onDeleteCommand { if let k = model.selection { model.delete(k) } }
     }
 }
 
@@ -256,6 +271,10 @@ struct DetailView: View {
                         .font(.callout).foregroundStyle(.secondary)
                     Toggle("Nicht in die AKM-Liste (z. B. Geräusch, Originalton-Gesang)", isOn: w.ausschliessen)
                         .help("Das Werk bleibt hier sichtbar, wird aber nicht exportiert.")
+                    Button(role: .destructive) { model.delete(key) } label: {
+                        Label("Werk aus der Liste löschen", systemImage: "trash")
+                    }
+                    .help("Entfernt das Werk aus Liste und Export (⌫). Wiederherstellen über „gelöscht“ unten in der Statuszeile.")
                     if !w.wrappedValue.bibliothek.isEmpty {
                         Label("Bibliotheksmusik: \(w.wrappedValue.bibliothek)\(w.wrappedValue.trackID.isEmpty ? "" : " · Track-ID \(w.wrappedValue.trackID)") – Angaben aus dem Dateinamen, Komponisten nur mit Nachnamen.",
                               systemImage: "building.columns")
@@ -313,35 +332,40 @@ struct DetailView: View {
     }
 
     /// Manuell nachschlagen: öffnet den Browser (kein automatisches Auslesen fremder Seiten).
+    /// Gesendet wird nur der Suchtext, der unten angezeigt wird.
     private func linkBox(_ w: MusicWork) -> some View {
-        let q = [w.titel, w.interpret, w.trackID].filter { !$0.isEmpty }.joined(separator: " ")
-        let enc = q.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
+        let q = LinkSearch.query(w)
         return GroupBox("Im Browser nachschlagen") {
             VStack(alignment: .leading, spacing: 6) {
                 HStack {
-                    if !w.bibliothek.isEmpty {
-                        Button("Bei UPM suchen") {
+                    Button("Websuche") { open(LinkSearch.google(q)) }
+                        .help("Google-Suche nach Titel und Interpret")
+                    Button("KI-Suche") { open(LinkSearch.aiMode(LinkSearch.aiQuery(w))) }
+                        .help("Google KI-Modus: fragt nach Komponist und Verlag – Antwort ist ein Hinweis, kein Beleg")
+                    Button("Discogs") { open(LinkSearch.discogs(q)) }
+                    Button("Amazon") { open(LinkSearch.amazon(q)) }
+                        .help("Amazon.de – in den Produktdetails stehen oft Label und Komponist")
+                }
+                if !w.bibliothek.isEmpty {
+                    HStack {
+                        Button("UPM-Seite finden") { open(LinkSearch.google(LinkSearch.upmQuery(w))) }
+                            .help("Google-Suche nur auf universalproductionmusic.com (Titel + Track-ID)")
+                        Button("UPM-Website") {
                             NSPasteboard.general.clearContents()
                             NSPasteboard.general.setString(w.trackID.isEmpty ? w.titel : w.trackID, forType: .string)
-                            NSWorkspace.shared.open(URL(string: "https://www.universalproductionmusic.com/")!)
+                            open(URL(string: "https://www.universalproductionmusic.com/")!)
                         }
                         .help("Öffnet die UPM-Website und kopiert die Track-ID – dort ins Suchfeld einfügen (⌘V)")
                     }
-                    Button("Websuche") {
-                        let extra = w.bibliothek.isEmpty ? "" : " \(w.bibliothek)"
-                        let e = (q + extra).addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-                        NSWorkspace.shared.open(URL(string: "https://duckduckgo.com/?q=\(e)")!)
-                    }
-                    Button("Discogs") { NSWorkspace.shared.open(URL(string: "https://www.discogs.com/search/?q=\(enc)&type=all")!) }
-                    Button("MusicBrainz") { NSWorkspace.shared.open(URL(string: "https://musicbrainz.org/search?query=\(enc)&type=recording")!) }
                 }
-                Text(w.bibliothek.isEmpty ? "Öffnet die Suche im Browser – Ergebnisse bitte selbst übernehmen."
-                     : "Bei „Bei UPM suchen“ ist die Track-ID schon kopiert: auf der UPM-Seite ins Suchfeld einfügen.")
-                    .font(.caption).foregroundStyle(.secondary)
+                Text("Suchtext: „\(q)“ – die Seiten öffnen sich im Browser, Ergebnisse bitte selbst prüfen und eintragen. KI-Antworten können falsch sein (z. B. Notenvertrieb statt Musikverlag).")
+                    .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading).padding(4)
         }
     }
+
+    private func open(_ url: URL) { NSWorkspace.shared.open(url) }
 
     @ViewBuilder
     private func researchBox(key: String) -> some View {

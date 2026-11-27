@@ -41,8 +41,31 @@ final class AppModel: ObservableObject {
     private var saved: [String: MusicWork] = [:]
 
     var warnings: [String] { edls.flatMap { f in f.warnings.map { "\(f.url.lastPathComponent): \($0)" } } }
-    var openCount: Int { works.filter { !$0.offen.isEmpty }.count }
-    var excludedCount: Int { works.filter(\.ausschliessen).count }
+    var openCount: Int { visibleWorks.filter { !$0.offen.isEmpty }.count }
+    var excludedCount: Int { visibleWorks.filter(\.ausschliessen).count }
+    /// Angezeigte Werke (gelöschte bleiben gemerkt, damit sie beim Neuberechnen nicht wiederkommen)
+    var visibleWorks: [MusicWork] { works.filter { !$0.geloescht } }
+    var deletedWorks: [MusicWork] { works.filter(\.geloescht) }
+
+    // MARK: Werke löschen / wiederherstellen
+
+    func delete(_ key: String) {
+        guard let i = works.firstIndex(where: { $0.key == key }) else { return }
+        let visible = visibleWorks
+        if selection == key, let pos = visible.firstIndex(where: { $0.key == key }) {
+            let rest = visible.filter { $0.key != key }
+            selection = rest.isEmpty ? nil : rest[min(pos, rest.count - 1)].key
+        }
+        works[i].geloescht = true
+        markDirty(); persist()
+    }
+
+    func restore(_ key: String) {
+        guard let i = works.firstIndex(where: { $0.key == key }) else { return }
+        works[i].geloescht = false
+        selection = key
+        markDirty(); persist()
+    }
 
     // MARK: EDL laden
 
@@ -204,9 +227,9 @@ final class AppModel: ObservableObject {
 
     /// Online-Recherche nur für veröffentlichte Musik: Bibliotheksmusik (UPM …) steht nicht in MusicBrainz.
     var researchTargets: [MusicWork] {
-        works.filter { !$0.ausschliessen && $0.bibliothek.isEmpty && ($0.komponist.isEmpty || $0.verlag.isEmpty) }
+        works.filter { !$0.ausschliessen && !$0.geloescht && $0.bibliothek.isEmpty && ($0.komponist.isEmpty || $0.verlag.isEmpty) }
     }
-    var exportWorks: [MusicWork] { works.filter { !$0.ausschliessen } }
+    var exportWorks: [MusicWork] { works.filter { !$0.ausschliessen && !$0.geloescht } }
 
     func researchAll() {
         let targets = researchTargets
