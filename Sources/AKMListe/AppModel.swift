@@ -24,6 +24,8 @@ final class AppModel: ObservableObject {
     @Published var selection: MusicWork.ID?
     @Published var candidates: [String: [ResearchCandidate]] = [:]
     @Published var researchLog: [ResearchLog] = []
+    @Published var searchStatus: [String: String] = [:]   // Rückmeldung je Werk
+    @Published var searching: Set<String> = []
     @Published var busy: BusyState?
     @Published var showTrackSheet = false
     @Published var showProduktion = false
@@ -148,15 +150,14 @@ final class AppModel: ObservableObject {
                 if cancelRequested { break }
                 busy?.done = n
                 busy?.detail = "\(n + 1) von \(targets.count): \(w.titel)"
-                do {
-                    let r = try await MusicBrainz.shared.search(w)
-                    researchLog.append(ResearchLog(url: r.url, anfrage: MusicBrainz.searchTerms(for: w).joined(separator: " / "),
-                                                   ergebnis: "\(r.candidates.count) Treffer"))
-                    candidates[w.key] = r.candidates
-                    if r.candidates.count == 1 { await choose(r.candidates[0], for: w.key, quiet: true) }
-                } catch {
-                    researchLog.append(ResearchLog(url: "", anfrage: w.titel, ergebnis: error.localizedDescription))
-                    if case ResearchError.offline = error { busy?.error = error.localizedDescription; break }
+                await runSearch(w)
+                if let c = candidates[w.key], c.count == 1, !(searchStatus[w.key] ?? "").contains("locker") {
+                    await choose(c[0], for: w.key, quiet: true)
+                    searchStatus[w.key] = "1 Treffer übernommen (MusicBrainz) – bitte prüfen."
+                }
+                if (searchStatus[w.key] ?? "").hasPrefix("Fehler: Keine Verbindung") {
+                    busy?.error = searchStatus[w.key]
+                    break
                 }
             }
             busy?.done = targets.count
@@ -166,16 +167,34 @@ final class AppModel: ObservableObject {
     }
 
     func researchOne(_ key: String) {
-        guard let w = works.first(where: { $0.key == key }) else { return }
+        guard let w = works.first(where: { $0.key == key }), !searching.contains(key) else { return }
+        searching.insert(key)
+        searchStatus[key] = "Suche läuft …"
         Task {
-            do {
-                let r = try await MusicBrainz.shared.search(w)
-                researchLog.append(ResearchLog(url: r.url, anfrage: MusicBrainz.searchTerms(for: w).joined(separator: " / "),
-                                               ergebnis: "\(r.candidates.count) Treffer"))
-                candidates[key] = r.candidates
-            } catch {
-                researchLog.append(ResearchLog(url: "", anfrage: w.titel, ergebnis: error.localizedDescription))
+            defer { searching.remove(key) }
+            await runSearch(w)
+        }
+    }
+
+    /// Eine Suche mit sichtbarer Rückmeldung (Treffer / kein Treffer / Fehler im Klartext).
+    private func runSearch(_ w: MusicWork) async {
+        let terms = MusicBrainz.searchTerms(for: w).joined(separator: " / ")
+        do {
+            let r = try await MusicBrainz.shared.search(w)
+            researchLog.append(ResearchLog(url: r.url, anfrage: terms,
+                                           ergebnis: "\(r.candidates.count) Treffer\(r.relaxed ? " (lockere Suche)" : "")"))
+            candidates[w.key] = r.candidates
+            switch r.candidates.count {
+            case 0:
+                searchStatus[w.key] = "Kein Treffer für „\(terms)“. Tipp: Titel oder Interpret oben korrigieren und erneut suchen."
+            case 1:
+                searchStatus[w.key] = "1 Treffer gefunden\(r.relaxed ? " (lockere Suche – bitte prüfen)" : "")."
+            default:
+                searchStatus[w.key] = "\(r.candidates.count) mögliche Treffer\(r.relaxed ? " (lockere Suche)" : "") – bitte die passende Aufnahme wählen."
             }
+        } catch {
+            researchLog.append(ResearchLog(url: "", anfrage: terms, ergebnis: error.localizedDescription))
+            searchStatus[w.key] = "Fehler: \(error.localizedDescription)"
         }
     }
 
@@ -210,6 +229,12 @@ final class AppModel: ObservableObject {
             researchLog.append(ResearchLog(url: "", anfrage: c.titel, ergebnis: error.localizedDescription))
         }
         candidates[key] = nil
+        if let w = works.first(where: { $0.key == key }) {
+            let got = [("Komponist", w.komponist), ("Verlag/Label", w.verlag), ("Album", w.beitrag)]
+                .filter { !$0.1.isEmpty }.map(\.0)
+            searchStatus[key] = "Übernommen von MusicBrainz: Titel, Interpret" + (got.isEmpty ? "" : ", " + got.joined(separator: ", "))
+                + (w.komponist.isEmpty ? ". Komponist ist dort nicht eingetragen – bitte selbst ergänzen." : ". Bitte prüfen.")
+        }
         persist()
     }
 

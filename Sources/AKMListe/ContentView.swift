@@ -255,10 +255,42 @@ struct DetailView: View {
                         }
                         .buttonStyle(.bordered)
                     }
-                } else {
-                    Button("Dieses Werk bei MusicBrainz suchen") { model.researchOne(key) }
-                    Text("Sendet nur: \(MusicBrainz.searchTerms(for: model.works.first { $0.key == key } ?? MusicWork(key: key)).joined(separator: " / "))")
-                        .font(.caption).foregroundStyle(.secondary)
+                }
+                HStack(spacing: 8) {
+                    Button(model.candidates[key]?.isEmpty == false ? "Erneut suchen" : "Dieses Werk bei MusicBrainz suchen") {
+                        model.researchOne(key)
+                    }
+                    .disabled(model.searching.contains(key))
+                    if model.searching.contains(key) {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+                Text("Sendet nur: \(MusicBrainz.searchTerms(for: model.works.first { $0.key == key } ?? MusicWork(key: key)).joined(separator: " / "))")
+                    .font(.caption).foregroundStyle(.secondary)
+                if let msg = model.searchStatus[key] {
+                    Text(msg)
+                        .font(.callout)
+                        .foregroundStyle(msg.hasPrefix("Fehler") ? Color.red : (msg.hasPrefix("Kein Treffer") ? Color.orange : Color.primary))
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                }
+                if !model.researchLog.isEmpty {
+                    DisclosureGroup("Abfrage-Protokoll (\(model.researchLog.count))") {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(model.researchLog.suffix(12).reversed()) { l in
+                                VStack(alignment: .leading, spacing: 0) {
+                                    Text("\(l.zeit.formatted(date: .omitted, time: .standard)) · \(l.anfrage) → \(l.ergebnis)")
+                                        .font(.caption)
+                                    if !l.url.isEmpty {
+                                        Text(l.url).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                                            .textSelection(.enabled)
+                                    }
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                    .font(.caption)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading).padding(4)

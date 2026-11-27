@@ -3,8 +3,36 @@ import Foundation
 /// Kommandozeilenmodus (für den automatischen Test beim Bauen):
 /// AKMListe --cli --edl a.edl [--edl b.edl] --tracks A5,A6 [--rate 25] [--produktion p.fuffprod] --out liste.xlsx
 enum CLI {
+    /// Suchtest gegen MusicBrainz (beim Bauen): Exit 0 = Treffer, 3 = kein Treffer, 4 = Netzwerkfehler.
+    static func searchTest(_ text: String) -> Never {
+        setvbuf(stdout, nil, _IONBF, 0)
+        var w = MusicWork(key: text)
+        w.titel = text
+        let sem = DispatchSemaphore(value: 0)
+        var code: Int32 = 0
+        Task.detached {
+            do {
+                let r = try await MusicBrainz.shared.search(w)
+                print("Suche: \(MusicBrainz.searchTerms(for: w).joined(separator: " / "))\(r.relaxed ? " (locker)" : "")")
+                for c in r.candidates.prefix(5) { print("  \(c.score)  \(c.titel) – \(c.interpret) · \(c.album)") }
+                if let first = r.candidates.first {
+                    let d = try await MusicBrainz.shared.details(first)
+                    print("  Details: \(d.fields.sorted { $0.key < $1.key }.map { "\($0.key)=\($0.value)" }.joined(separator: "; "))")
+                }
+                code = r.candidates.isEmpty ? 3 : 0
+            } catch {
+                print("Netzwerk/Server: \(error.localizedDescription)")
+                code = 4
+            }
+            sem.signal()
+        }
+        sem.wait()
+        exit(code)
+    }
+
     static func runIfRequested() -> Bool {
         let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--suche"), i + 1 < args.count { searchTest(args[i + 1]) }
         guard args.contains("--cli") else { return false }
         setvbuf(stdout, nil, _IONBF, 0)     // Ausgabe sofort (sonst geht sie bei einem Absturz verloren)
         var edls: [URL] = []

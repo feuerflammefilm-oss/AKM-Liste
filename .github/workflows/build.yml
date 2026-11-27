@@ -34,6 +34,18 @@ jobs:
           python3 Tests/check_xlsx.py build/test_akm.xlsx klein
           python3 Tests/check_xlsx.py build/test_akm_viele.xlsx viele
 
+      - name: Suchtest MusicBrainz (echte Abfrage)
+        run: |
+          APP="build/FuFF AKM-Liste.app/Contents/MacOS/AKMListe"
+          for q in "NICK CAVE & THE BAD SEEDS - RED RIGHT HAND" \
+                   "THE GRAND BUDAPEST HOTEL - NIGHT TRAIN TO NEBELSBAD - ALEXANDRE DESPLAT" \
+                   "CYMANDE GETTING IT BACK 1972"; do
+            set +e; "$APP" --suche "$q"; rc=$?; set -e
+            if [ $rc -eq 3 ]; then echo "::error::Kein Treffer für: $q"; exit 1; fi
+            if [ $rc -eq 4 ]; then echo "::warning::MusicBrainz nicht erreichbar – Suchtest übersprungen"; fi
+            if [ $rc -ne 0 ] && [ $rc -ne 4 ]; then echo "::error::Absturz bei: $q (Code $rc)"; exit 1; fi
+          done
+
       - name: Als Download speichern
         uses: actions/upload-artifact@v5
         with:

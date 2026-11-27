@@ -85,13 +85,26 @@ actor MusicBrainz {
         s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")
     }
 
-    func search(_ w: MusicWork) async throws -> (url: String, candidates: [ResearchCandidate]) {
+    func search(_ w: MusicWork) async throws -> (url: String, candidates: [ResearchCandidate], relaxed: Bool) {
         let parts = Self.searchTerms(for: w)
-        let query = parts.map { p in
+        // 1) genau: jeder Teil als Phrase in Titel, Interpret oder Album
+        let strict = parts.map { p in
             "(recording:\"\(Self.q(p))\" OR artist:\"\(Self.q(p))\" OR release:\"\(Self.q(p))\")"
         }.joined(separator: " AND ")
+        let first = try await query(strict)
+        if !first.candidates.isEmpty { return (first.url, first.candidates, false) }
+        // 2) locker: einzelne Wörter (hilft bei Dateinamen ohne „Interpret – Titel“)
+        let words = parts.joined(separator: " ")
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { $0.count > 1 && Int($0) == nil }
+        guard !words.isEmpty else { return (first.url, [], false) }
+        let second = try await query(words.joined(separator: " "))
+        return (second.url, second.candidates.filter { $0.score >= 60 }, true)
+    }
+
+    private func query(_ q: String) async throws -> (url: String, candidates: [ResearchCandidate]) {
         var c = URLComponents(string: "\(base)/recording")!
-        c.queryItems = [URLQueryItem(name: "query", value: query), URLQueryItem(name: "limit", value: "8"),
+        c.queryItems = [URLQueryItem(name: "query", value: q), URLQueryItem(name: "limit", value: "8"),
                         URLQueryItem(name: "fmt", value: "json")]
         let url = c.url!
         let d = try await get(url)
